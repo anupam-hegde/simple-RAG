@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Document Assistant - API Reference</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Mermaid JS for Architecture Diagram -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true});</script>
+    <style>
+        :root {
+            --primary: #1E293B;      /* Slate 800 */
+            --accent: #2563EB;       /* Blue 600 */
+            --bg-light: #F8FAFC;     /* Slate 50 */
+            --border: #E2E8F0;       /* Slate 200 */
+            --text-main: #334155;    /* Slate 700 */
+            --text-muted: #64748B;   /* Slate 500 */
+            
+            --method-get: #10B981;   /* Emerald 500 */
+            --method-post: #3B82F6;  /* Blue 500 */
+            --method-del: #EF4444;   /* Red 500 */
+            
+            --code-bg: #0F172A;      /* Slate 900 */
+            --code-text: #E2E8F0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+            background-color: white;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        .doc-header {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--primary);
+            color: white;
+            border-radius: 12px;
+            margin-bottom: 40px;
+        }
+        .doc-header h1 {
+            font-size: 2.5rem;
+            margin: 0 0 10px 0;
+        }
+        .doc-header p {
+            font-size: 1.1rem;
+            color: #CBD5E1;
+            margin: 0;
+        }
+
+        /* Typography */
+        h1.section-title {
+            font-size: 1.75rem;
+            color: var(--primary);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 10px;
+            margin-top: 50px;
+            margin-bottom: 20px;
+        }
+        h2 {
+            font-size: 1.25rem;
+            color: var(--primary);
+            margin-top: 30px;
+        }
+        p { margin-bottom: 16px; }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 16px 0;
+        }
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-light);
+            color: var(--accent);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Endpoints */
+        .endpoint {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 30px;
+            overflow: hidden;
+            page-break-inside: avoid;
+        }
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            background-color: var(--bg-light);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .method {
+            font-weight: 700;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-right: 12px;
+        }
+        .method.GET { background-color: var(--method-get); }
+        .method.POST { background-color: var(--method-post); }
+        .method.DELETE { background-color: var(--method-del); }
+        
+        .path {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+        .endpoint-body {
+            padding: 20px;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background-color: var(--bg-light);
+            font-weight: 600;
+            color: var(--primary);
+        }
+        .col-name { font-weight: 600; color: var(--primary); }
+        .col-type { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 0.85rem; }
+        .req-yes { color: var(--method-del); font-weight: 600; font-size: 0.85rem; }
+        .req-no { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Architecture Diagram Container */
+        .diagram-container {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        /* Print Styles */
+        @media print {
+            body { font-size: 11pt; }
+            .container { padding: 0; max-width: 100%; }
+            .doc-header { margin-bottom: 20px; padding: 40px 20px; }
+            pre { white-space: pre-wrap; word-wrap: break-word; }
+            .endpoint { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="doc-header">
+        <h1>RAG Document Assistant</h1>
+        <p>REST API Reference & Architecture Documentation</p>
+    </div>
+
+    <!-- ── OVERVIEW & ARCHITECTURE ── -->
+    <h1 class="section-title">1. System Architecture</h1>
+    <p>
+        The RAG Document Assistant is built on a modular architecture using FastAPI for the backend, Streamlit for the frontend, ChromaDB for vector storage, HuggingFace for local embeddings, and Groq (Llama 3.3) for lightning-fast LLM generation.
+    </p>
+
+    <div class="diagram-container">
+        <div class="mermaid">
+        flowchart TD
+            User([User]) -->|Uploads PDF / Asks Question| UI[Streamlit Frontend]
+            
+            subgraph Backend [FastAPI Backend]
+                API[API Router]
+                RAG[RAG Service]
+                CH[Chat History Service]
+                
+                API <--> RAG
+                API <--> CH
+            end
+            
+            UI <-->|REST / SSE Streams| API
+            
+            subgraph Data Layer
+                Chroma[(ChromaDB)]
+                Storage[File System JSON]
+            end
+            
+            subgraph External Models
+                HF[HuggingFace Local Embeddings]
+                Groq[Groq API - Llama 3.3]
+            end
+            
+            RAG <-->|Fetch Context| Chroma
+            RAG -->|Generate Embeddings| HF
+            RAG <-->|Generate Answer| Groq
+            CH <-->|Persist Sessions| Storage
+        </div>
+    </div>
+
+
+    <h1 class="section-title">2. Authentication</h1>
+    <p>
+        The API requires authentication via an HTTP header. Set your desired API Key in the backend <code>.env</code> file under <code>API_KEY</code>. If left empty, authentication is disabled (dev mode).
+    </p>
+    <pre><code>Header: X-API-Key: &lt;your_secret_key&gt;</code></pre>
+
+
+    <h1 class="section-title">3. Document Endpoints</h1>
+
+    <!-- Upload Endpoint -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/upload</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Upload a document (PDF, TXT, MD). The file is processed synchronously: text is extracted, chunked, embedded locally, and stored in ChromaDB.</p>
+            
+            <h2>Request Form-Data</h2>
+            <table>
+                <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                <tr><td class="col-name">file</td><td class="col-type">File</td><td class="req-yes">Yes</td><td>The document to ingest.</td></tr>
+            </table>
+
+            <h2>Response (200 OK)</h2>
+            <pre><code>{
+  "status": "success",
+  "filename": "Project_Orion_Specs.pdf",
+  "message": "File 'Project_Orion_Specs.pdf' processed successfully. 14 chunks indexed."
+}</code></pre>
+        </div>
+    </div>
+
+    <!-- Upload Progress Endpoint -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/upload/progress</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Upload a document and receive real-time Server-Sent Events (SSE) detailing the progress of text extraction, chunking, and embedding. Ideal for UI progress bars.</p>
+            
+            <h2>Response Stream (text/event-stream)</h2>
+            <pre><code>data: {"stage": "saving", "message": "Saving uploaded file…", "pct": 5}
+
+data: {"stage": "extracting", "message": "Extracting text from document…", "pct": 15}
+
+data: {"stage": "chunking", "message": "Text split into 8 chunks...", "pct": 30, "total": 8}
+
+data: {"stage": "embedding", "message": "Embedding chunk 1 of 8", "pct": 38, "current": 1, "total": 8}
+
+data: {"stage": "done", "message": "Indexed successfully!", "pct": 100, "chunks": 8}</code></pre>
+        </div>
+    </div>
+
+
+    <h1 class="section-title">4. Chat & Generation Endpoints</h1>
+
+    <!-- Chat Endpoint -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/chat</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Submit a question against the ingested documents. Returns a synchronous JSON payload with the LLM answer and the specific source chunks cited.</p>
+            
+            <h2>Request Body (application/json)</h2>
+            <table>
+                <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                <tr><td class="col-name">question</td><td class="col-type">string</td><td class="req-yes">Yes</td><td>The user query.</td></tr>
+                <tr><td class="col-name">session_id</td><td class="col-type">string</td><td class="req-no">No</td><td>Chat session UUID for history.</td></tr>
+            </table>
+
+            <h2>Response (200 OK)</h2>
+            <pre><code>{
+  "answer": "The Orion phone features 48 hours of battery life and recharges in 8 minutes. [Source: specs.pdf, Page: 1]",
+  "sources": [
+    {
+      "text": "Carbon-lattice energy cell. 48 hours continuous usage, recharges in 8 minutes.",
+      "filename": "specs.pdf",
+      "page": 1
+    }
+  ],
+  "session_id": "abc-123-def"
+}</code></pre>
+        </div>
+    </div>
+
+    <!-- Chat Stream Endpoint -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/chat/stream</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Submit a question and stream the LLM response token-by-token via SSE. At the end of the stream, a dedicated <code>sources</code> event provides the citations.</p>
+            
+            <h2>Response Stream (text/event-stream)</h2>
+            <pre><code>data: The Orion phone
+data:  features a battery
+data:  life of 48 hours.
+
+event: sources
+data: [{"text": "...", "filename": "specs.pdf", "page": 1}]
+
+event: done
+data: [DONE]</code></pre>
+        </div>
+    </div>
+
+
+    <h1 class="section-title">5. Chat History Endpoints</h1>
+
+    <!-- List Sessions -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/chat/history</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Retrieve a list of all chat sessions (newest first).</p>
+            <pre><code>[
+  {
+    "id": "abc-123",
+    "title": "Battery life inquiry",
+    "created_at": "2026-06-29T10:00:00Z"
+  }
+]</code></pre>
+        </div>
+    </div>
+
+    <!-- Get Session -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/chat/history/{session_id}</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Retrieve the full conversation history (all user and assistant messages) for a specific session.</p>
+            <pre><code>{
+  "id": "abc-123",
+  "title": "Battery life inquiry",
+  "created_at": "2026-06-29T10:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the battery life?",
+      "sources": []
+    },
+    {
+      "role": "assistant",
+      "content": "48 hours.",
+      "sources": [{"text": "...", "filename": "specs.pdf", "page": 1}]
+    }
+  ]
+}</code></pre>
+        </div>
+    </div>
+
+    <!-- Delete Session -->
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method DELETE">DELETE</span>
+            <span class="path">/api/chat/history/{session_id}</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Permanently delete a chat session and all its messages.</p>
+            <pre><code>{"status": "deleted", "session_id": "abc-123"}</code></pre>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

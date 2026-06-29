@@ -112,22 +112,6 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
-# ── Background Processing ────────────────────────────────────────────────────
-
-
-def _process_document_background(filename: str, file_bytes: bytes) -> None:
-    """Process a document in a background thread (sync wrapper for async)."""
-    try:
-        file_stream = BytesIO(file_bytes)
-        asyncio.run(rag_service.ingest_document_stream(filename, file_stream))
-        logger.info(f"Background processing completed for {filename}")
-    except DocumentIngestionError as e:
-        logger.error(f"Background document ingestion failed for {filename}: {e}")
-    except Exception:
-        logger.error(
-            f"Unexpected background error for {filename}: {traceback.format_exc()}"
-        )
-
 
 # ── Upload Endpoint ──────────────────────────────────────────────────────────
 
@@ -135,18 +119,18 @@ def _process_document_background(filename: str, file_bytes: bytes) -> None:
 @app.post(
     "/api/upload",
     response_model=UploadResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
     tags=["Documents"],
     summary="Upload a document for ingestion",
 )
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     _api_key: str = Depends(require_api_key),
 ):
     """
-    Uploads a document file (PDF, TXT, MD) and queues it for processing.
+    Uploads a document file (PDF, TXT, MD) and processes it synchronously.
     Triggers text extraction → chunking → embedding → ChromaDB storage.
+    Returns only after the document is fully ingested.
     """
     allowed_extensions = {".pdf", ".txt", ".md"}
     if not file.filename or not any(
@@ -165,14 +149,22 @@ async def upload_document(
                 detail="Empty file uploaded.",
             )
 
-        background_tasks.add_task(_process_document_background, file.filename, contents)
+        file_stream = BytesIO(contents)
+        num_chunks = await rag_service.ingest_document_stream(file.filename, file_stream)
+        logger.info(f"Document '{file.filename}' ingested successfully: {num_chunks} chunks")
 
         return UploadResponse(
-            status="processing_queued",
+            status="success",
             filename=file.filename,
-            message=f"File '{file.filename}' queued for processing.",
+            message=f"File '{file.filename}' processed successfully. {num_chunks} chunks indexed.",
         )
 
+    except DocumentIngestionError as e:
+        logger.error(f"Ingestion failed for {file.filename}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Document ingestion failed: {str(e)}",
+        ) from e
     except HTTPException:
         raise
     except Exception as e:
@@ -181,6 +173,47 @@ async def upload_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}",
         ) from e
+
+
+# ── Upload Progress (SSE) Endpoint ───────────────────────────────────────────
+
+
+@app.post(
+    "/api/upload/progress",
+    tags=["Documents"],
+    summary="Upload a document and stream ingestion progress (SSE)",
+)
+async def upload_document_progress(
+    file: UploadFile = File(...),
+    _api_key: str = Depends(require_api_key),
+):
+    """
+    Uploads a document and streams real-time ingestion progress as SSE events.
+    Each event is a JSON object with keys: stage, message, pct, (current, total).
+    """
+    allowed_extensions = {".pdf", ".txt", ".md"}
+    if not file.filename or not any(
+        file.filename.lower().endswith(ext) for ext in allowed_extensions
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Only {', '.join(allowed_extensions)} files are allowed.",
+        )
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file uploaded.",
+        )
+
+    file_stream = BytesIO(contents)
+
+    return StreamingResponse(
+        rag_service.ingest_document_with_progress(file.filename, file_stream),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Chat Endpoint ────────────────────────────────────────────────────────────

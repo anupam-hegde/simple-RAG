@@ -20,6 +20,7 @@ import streamlit as st
 # ==========================================
 BASE_URL = "http://localhost:8000"
 UPLOAD_URL = f"{BASE_URL}/api/upload"
+UPLOAD_PROGRESS_URL = f"{BASE_URL}/api/upload/progress"
 CHAT_URL = f"{BASE_URL}/api/chat"
 STREAM_URL = f"{BASE_URL}/api/chat/stream"
 HISTORY_URL = f"{BASE_URL}/api/chat/history"
@@ -58,19 +59,54 @@ def _headers() -> dict:
     return h
 
 
-def upload_file_to_backend(file):
-    """Upload a file to the backend ingestion pipeline."""
+def upload_file_with_progress(file, progress_bar, status_text):
+    """
+    Upload a file using the SSE progress endpoint.
+    Updates `progress_bar` (st.progress) and `status_text` (st.empty) live.
+    Returns (success: bool, message: str).
+    """
+    import mimetypes
+
+    mime_type, _ = mimetypes.guess_type(file.name)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
     try:
-        import mimetypes
-
-        mime_type, _ = mimetypes.guess_type(file.name)
-        if not mime_type:
-            mime_type = "application/octet-stream"
-
         files = {"file": (file.name, file.getvalue(), mime_type)}
-        response = requests.post(UPLOAD_URL, files=files, headers=_headers(), timeout=30)
+        response = requests.post(
+            UPLOAD_PROGRESS_URL,
+            files=files,
+            headers=_headers(),
+            stream=True,
+            timeout=300,
+        )
         response.raise_for_status()
-        return True, response.json()
+
+        client = sseclient.SSEClient(response)
+        final_message = "Upload complete."
+        for event in client.events():
+            try:
+                data = json.loads(event.data)
+            except json.JSONDecodeError:
+                continue
+
+            pct = data.get("pct", 0) / 100
+            msg = data.get("message", "")
+            stage = data.get("stage", "")
+
+            progress_bar.progress(pct)
+            status_text.markdown(f"**{msg}**")
+
+            if stage == "done":
+                final_message = msg
+                return True, final_message
+            elif stage == "error":
+                return False, msg
+
+        return True, final_message
+
+    except requests.exceptions.ConnectionError:
+        return False, f"Cannot connect to backend at `{BASE_URL}`. Is it running?"
     except requests.exceptions.RequestException as e:
         return False, str(e)
 
@@ -174,13 +210,23 @@ def render_sidebar():
         )
 
         if uploaded_file is not None:
-            if st.button("Upload to Backend", use_container_width=True):
-                with st.spinner("Uploading and processing…"):
-                    success, result = upload_file_to_backend(uploaded_file)
-                    if success:
-                        st.toast("File uploaded successfully!", icon="✅")
-                    else:
-                        st.error(f"Upload failed.\n\n{result}")
+            if st.button("⬆️ Upload & Index", use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                status_text.markdown("**Starting upload…**")
+
+                success, result = upload_file_with_progress(
+                    uploaded_file, progress_bar, status_text
+                )
+
+                if success:
+                    progress_bar.progress(1.0)
+                    status_text.markdown(f"✅ **Done!** {result}")
+                    st.toast("Document indexed and ready to query!", icon="✅")
+                else:
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.error(f"Upload failed: {result}")
 
         st.divider()
 

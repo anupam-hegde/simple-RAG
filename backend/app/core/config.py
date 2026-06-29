@@ -1,4 +1,3 @@
-from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,13 +15,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    OPENAI_API_KEY: str
+    GROQ_API_KEY: str
     API_KEY: str = ""  # Set to enforce auth; leave empty to skip (dev mode)
     CHROMA_PERSIST_DIR: str = str(CHROMA_DIR)
     UPLOAD_DIR: str = str(UPLOAD_DIR)
     CHROMA_COLLECTION_NAME: str = "rag_documents"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
-    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     API_V1_PREFIX: str = "/api/v1"
@@ -34,7 +33,6 @@ class Settings(BaseSettings):
             Path(d).mkdir(parents=True, exist_ok=True)
 
 
-@lru_cache
 def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_directories()

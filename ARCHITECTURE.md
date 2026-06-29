@@ -22,7 +22,7 @@ graph TB
         CHUNK["✂️ Chunking<br/>(RecursiveCharacterTextSplitter)"]
         EMBED["🧮 Embedding<br/>(all-MiniLM-L6-v2)"]
         RETRIEVE["🔍 Retrieval<br/>(Cosine Similarity)"]
-        GENERATE["🤖 Generation<br/>(GPT-4o-mini)"]
+        GENERATE["🤖 Generation<br/>(Groq - Llama 3.3)"]
     end
 
     subgraph "Storage"
@@ -31,7 +31,8 @@ graph TB
     end
 
     subgraph "External"
-        OPENAI["☁️ OpenAI API"]
+        GROQ["☁️ Groq API"]
+        HF["☁️ HuggingFace Local"]
     end
 
     UI --> |"HTTP/SSE"| API
@@ -52,8 +53,8 @@ graph TB
     RETRIEVE --> GENERATE
     GENERATE --> |"Answer"| API
 
-    EMBED --> OPENAI
-    GENERATE --> OPENAI
+    EMBED --> HF
+    GENERATE --> GROQ
     HISTORY --> JSON
 ```
 
@@ -66,26 +67,30 @@ sequenceDiagram
     participant BE as FastAPI Backend
     participant RAG as RAG Service
     participant DB as ChromaDB
-    participant AI as OpenAI API
+    participant AI as Groq API
 
-    Note over U, AI: 📤 Document Ingestion Flow
+    Note over U, AI: 📤 Document Ingestion Flow (Progressive SSE)
     U->>FE: Upload PDF/TXT/MD
-    FE->>BE: POST /api/upload
+    FE->>BE: POST /api/upload/progress
     BE->>BE: Validate file type
-    BE-->>FE: 202 Accepted (queued)
-    BE->>RAG: Background: ingest_document_stream()
+    BE->>RAG: ingest_document_with_progress()
     RAG->>RAG: Extract text (pypdf / raw read)
+    RAG-->>FE: SSE: extracting progress
     RAG->>RAG: Chunk text (1000 chars, 200 overlap)
-    RAG->>AI: Generate embeddings
-    AI-->>RAG: Embedding vectors
-    RAG->>DB: Store chunks + metadata
+    RAG-->>FE: SSE: chunking progress
+    loop Each Chunk
+        RAG->>RAG: Generate local embedding
+        RAG->>DB: Store chunk + metadata
+        RAG-->>FE: SSE: embedding progress
+    end
+    BE-->>FE: SSE: done
+
 
     Note over U, AI: 💬 Question Answering Flow (Streaming)
     U->>FE: Ask question
     FE->>BE: POST /api/chat/stream
     BE->>RAG: answer_query_stream()
-    RAG->>AI: Embed query
-    AI-->>RAG: Query vector
+    RAG->>RAG: Embed query locally
     RAG->>DB: Similarity search (top-k=4)
     DB-->>RAG: Relevant chunks + metadata
     RAG->>AI: Generate answer (stream=True)
@@ -111,7 +116,7 @@ RAG/
 │
 ├── backend/
 │   ├── Dockerfile
-│   ├── .env                      # OPENAI_API_KEY, API_KEY
+│   ├── .env                      # GROQ_API_KEY, API_KEY
 │   ├── requirements.txt
 │   └── app/
 │       ├── __init__.py
@@ -143,8 +148,8 @@ RAG/
 |-------|-----------|---------|
 | Frontend | Streamlit | Interactive chat UI |
 | Backend | FastAPI + Uvicorn | Async REST API |
-| LLM | OpenAI GPT-4o-mini | Answer generation |
-| Embeddings | all-MiniLM-L6-v2 (HuggingFace) | Semantic vector encoding |
+| LLM | Groq (Llama 3.3 70B) | Answer generation |
+| Embeddings | all-MiniLM-L6-v2 (HuggingFace) | Semantic vector encoding (Local) |
 | Vector DB | ChromaDB (PersistentClient) | Similarity search |
 | Text Extraction | pypdf | PDF parsing |
 | Chunking | LangChain RecursiveCharacterTextSplitter | Document segmentation |

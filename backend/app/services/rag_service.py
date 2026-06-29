@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
+from groq import Groq
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from openai import OpenAI
 from pypdf import PdfReader
 
 from backend.app.core.config import get_settings
@@ -197,28 +197,22 @@ class RAGService:
         self, query: str, contexts: list[RetrievedContext]
     ) -> QueryResponse:
         settings = get_settings()
+
         system_prompt = (
             "You are a precise AI Document Assistant. Answer the user's question using ONLY "
             "the provided context blocks. If the context does not contain the answer, state clearly "
-            "that you cannot find it. For every factual claim you make, you MUST explicitly cite "
-            "the source file name and page number at the end of the sentence or paragraph based on "
-            "the context metadata."
+            "that you cannot find it. For every factual claim, cite the source filename and page number."
         )
-
         context_text = "\n\n".join(
             f"[Source: {ctx.filename}, Page: {ctx.page}]\n{ctx.text}"
             for ctx in contexts
         )
-
         messages = [
             {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Context:\n{context_text}\n\nQuestion: {query}",
-            },
+            {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}"},
         ]
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = Groq(api_key=settings.GROQ_API_KEY)
         try:
             response = client.chat.completions.create(
                 model=settings.LLM_MODEL,
@@ -227,7 +221,7 @@ class RAGService:
             )
             answer = response.choices[0].message.content
         except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
+            logger.error(f"Groq generation failed: {e}")
             raise RetrievalError("LLM answer generation failed.") from e
 
         return QueryResponse(answer=answer, sources=contexts)
@@ -245,12 +239,11 @@ class RAGService:
             return
 
         settings = get_settings()
+
         system_prompt = (
             "You are a precise AI Document Assistant. Answer the user's question using ONLY "
             "the provided context blocks. If the context does not contain the answer, state clearly "
-            "that you cannot find it. For every factual claim you make, you MUST explicitly cite "
-            "the source file name and page number at the end of the sentence or paragraph based on "
-            "the context metadata."
+            "that you cannot find it. For every factual claim, cite the source filename and page number."
         )
         context_text = "\n\n".join(
             f"[Source: {ctx.filename}, Page: {ctx.page}]\n{ctx.text}"
@@ -261,7 +254,7 @@ class RAGService:
             {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}"},
         ]
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = Groq(api_key=settings.GROQ_API_KEY)
         try:
             stream = client.chat.completions.create(
                 model=settings.LLM_MODEL,
@@ -274,8 +267,8 @@ class RAGService:
                 if delta.content:
                     yield f"data: {delta.content}\n\n"
         except Exception as e:
-            logger.error(f"LLM streaming failed: {e}")
-            yield f"data: [Error: LLM generation failed]\n\n"
+            logger.error(f"Groq streaming failed: {e}")
+            yield f"data: [Error: {e}]\n\n"
 
         # Send source references as a JSON event
         import json
@@ -388,6 +381,98 @@ class RAGService:
             )
 
         logger.info(f"Stored {len(chunks)} chunks in ChromaDB")
+
+
+    async def ingest_document_with_progress(
+        self,
+        filename: str,
+        file_stream: "BinaryIO",
+    ):
+        """
+        Ingests a document and yields SSE-formatted progress events.
+
+        Events yielded:
+          data: {"stage": "saving",    "message": "...", "pct": 5}
+          data: {"stage": "extracting","message": "...", "pct": 15}
+          data: {"stage": "chunking",  "message": "...", "pct": 30, "total": N}
+          data: {"stage": "embedding", "message": "...", "pct": X,  "current": i, "total": N}
+          data: {"stage": "done",      "message": "...", "pct": 100, "chunks": N}
+          data: {"stage": "error",     "message": "..."}
+        """
+        import json
+
+        def _event(payload: dict) -> str:
+            return f"data: {json.dumps(payload)}\n\n"
+
+        try:
+            # ── 1. Save file to disk ──────────────────────────────────────
+            yield _event({"stage": "saving", "message": "Saving uploaded file…", "pct": 5})
+            temp_path = Path(self.settings.UPLOAD_DIR) / filename
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
+            with temp_path.open("wb") as f:
+                f.write(file_stream.read())
+
+            # ── 2. Extract text ───────────────────────────────────────────
+            yield _event({"stage": "extracting", "message": "Extracting text from document…", "pct": 15})
+            chunks, metadata = await self._extract_and_chunk(temp_path)
+            total = len(chunks)
+
+            # ── 3. Chunking done ──────────────────────────────────────────
+            yield _event({
+                "stage": "chunking",
+                "message": f"Text split into {total} chunks. Starting embedding…",
+                "pct": 30,
+                "total": total,
+            })
+
+            # ── 4. Embed + store each chunk ───────────────────────────────
+            chroma_collection = self._chroma.collection
+            embedding_fn = self._chroma.embedding_function
+
+            for idx, (chunk, meta) in enumerate(zip(chunks, metadata)):
+                try:
+                    embedding = embedding_fn.embed_query(chunk)
+                except Exception as e:
+                    raise DocumentIngestionError(f"Embedding failed at chunk {idx}: {e}") from e
+
+                doc_id = f"{meta.source}_page{meta.page}_chunk{idx}"
+                chroma_collection.add(
+                    ids=[doc_id],
+                    embeddings=[embedding],
+                    documents=[chunk],
+                    metadatas=[{"source": meta.source, "page": meta.page}],
+                )
+
+                # Progress: 30% → 95% spread across chunks
+                pct = 30 + int((idx + 1) / total * 65)
+                yield _event({
+                    "stage": "embedding",
+                    "message": f"Embedding & storing chunk {idx + 1} of {total}…",
+                    "pct": pct,
+                    "current": idx + 1,
+                    "total": total,
+                })
+
+            # ── 5. Done ───────────────────────────────────────────────────
+            logger.info(f"Stored {total} chunks in ChromaDB for '{filename}'")
+            yield _event({
+                "stage": "done",
+                "message": f"✅ '{filename}' indexed successfully! {total} chunks ready.",
+                "pct": 100,
+                "chunks": total,
+            })
+
+        except DocumentIngestionError as e:
+            yield _event({"stage": "error", "message": str(e)})
+        except Exception as e:
+            logger.error(f"Progress ingestion failed for {filename}: {e}")
+            yield _event({"stage": "error", "message": f"Unexpected error: {e}"})
+        finally:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 async def get_rag_service() -> RAGService:
