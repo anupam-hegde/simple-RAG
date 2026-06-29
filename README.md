@@ -10,7 +10,7 @@ An intelligent document assistant that answers questions from uploaded documents
 - **📤 Document Upload** — Upload PDF, TXT, and Markdown files via API or UI
 - **📄 Text Extraction** — Automatic text extraction using `pypdf` (PDF) and raw I/O (TXT/MD)
 - **✂️ Smart Chunking** — `RecursiveCharacterTextSplitter` with 1000-char chunks and 200-char overlap
-- **🧮 Embedding Generation** — OpenAI `text-embedding-3-small` for semantic vector encoding
+- **🧮 Embedding Generation** — `all-MiniLM-L6-v2` (via Hugging Face) for free, local semantic vector encoding
 - **🗄️ ChromaDB Integration** — Persistent vector store with cosine similarity search
 - **💬 Q&A with Source References** — Answers cite exact filenames and page numbers
 - **📜 Chat History API** — Full CRUD for conversation sessions with JSON persistence

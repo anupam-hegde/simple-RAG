@@ -8,3 +8,5 @@ pypdf>=5.0.0
 python-multipart>=0.0.12
 pydantic-settings>=2.6.0
 openai>=1.40.0
+sentence-transformers>=3.0.0
+langchain-huggingface>=0.0.3

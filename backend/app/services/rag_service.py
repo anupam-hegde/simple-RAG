@@ -7,7 +7,7 @@ from typing import BinaryIO
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from openai import OpenAI
 from pypdf import PdfReader
 
@@ -82,11 +82,9 @@ class ChromaService:
         return self._collection
 
     @property
-    def embedding_function(self) -> OpenAIEmbeddings:
-        settings = get_settings()
-        return OpenAIEmbeddings(
-            api_key=settings.OPENAI_API_KEY,
-            model=self.embedding_model,
+    def embedding_function(self) -> HuggingFaceEmbeddings:
+        return HuggingFaceEmbeddings(
+            model_name=self.embedding_model,
         )
 
     def reset_collection(self) -> None:

@@ -20,7 +20,7 @@ graph TB
     subgraph "RAG Pipeline"
         EXTRACT["📄 Text Extraction<br/>(pypdf / raw read)"]
         CHUNK["✂️ Chunking<br/>(RecursiveCharacterTextSplitter)"]
-        EMBED["🧮 Embedding<br/>(text-embedding-3-small)"]
+        EMBED["🧮 Embedding<br/>(all-MiniLM-L6-v2)"]
         RETRIEVE["🔍 Retrieval<br/>(Cosine Similarity)"]
         GENERATE["🤖 Generation<br/>(GPT-4o-mini)"]
     end
@@ -144,7 +144,7 @@ RAG/
 | Frontend | Streamlit | Interactive chat UI |
 | Backend | FastAPI + Uvicorn | Async REST API |
 | LLM | OpenAI GPT-4o-mini | Answer generation |
-| Embeddings | text-embedding-3-small | Semantic vector encoding |
+| Embeddings | all-MiniLM-L6-v2 (HuggingFace) | Semantic vector encoding |
 | Vector DB | ChromaDB (PersistentClient) | Similarity search |
 | Text Extraction | pypdf | PDF parsing |
 | Chunking | LangChain RecursiveCharacterTextSplitter | Document segmentation |

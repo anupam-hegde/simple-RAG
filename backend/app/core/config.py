@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = str(CHROMA_DIR)
     UPLOAD_DIR: str = str(UPLOAD_DIR)
     CHROMA_COLLECTION_NAME: str = "rag_documents"
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     LLM_MODEL: str = "gpt-4o-mini"
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
